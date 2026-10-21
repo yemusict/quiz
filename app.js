@@ -3,8 +3,14 @@
 'use strict';
 
 /* ───────────── 기본 설정 ───────────── */
-const SHOW_MS = 10000;      // 문제 보여주는 시간
-const ANSWER_MS = 10000;    // 답하는 시간
+const SHOW_MS = 3000;       // 문제 보여주는 시간 (모든 카테고리)
+const ANSWER_MS = 10000;    // 답하는 시간 (기본)
+const ANSWER_MS_BY_CAT = { idiom: 30000 };   // 카테고리별 답하는 시간
+const answerMs = cat => ANSWER_MS_BY_CAT[cat] || ANSWER_MS;
+const IDIOM_HINTS = [5000, 10000];           // 사자성어 힌트: 답하기 시작 후 첫 글자 5초, 두 번째 글자 10초
+const HINT_MULT = [1, .75, .5];              // 힌트 사용 개수별 점수 배율
+const enc = s => btoa(unescape(encodeURIComponent(s))).split('').reverse().join('');
+const dec = s => { try { return decodeURIComponent(escape(atob(String(s).split('').reverse().join('')))); } catch (e) { return ''; } };
 const COUNTS = [5, 10, 15, 20];
 const CATS = {
   spelling: { name: '맞춤법',  icon: '✍️', c: '#FF5C7A', desc: '둘 중 바른 말 고르기' },
@@ -123,20 +129,30 @@ function buildQ(cat, lv, idx, custom) {
   }
   if (cat === 'idiom') {
     const [w, m] = item;
-    return { q: { ...base, type: 'text', prompt: '뜻에 맞는 사자성어는?', text: m, hint: chosung(w), len: [...w].length }, answerText: w, explain: '' };
+    return { q: { ...base, type: 'text', prompt: '뜻에 맞는 사자성어는?', text: m, hint: chosung(w), len: [...w].length, hl: enc([...w].slice(0, 2).join('')) }, answerText: w, explain: '' };
   }
   if (cat === 'proverb') {
-    const [p, b] = item; const n = [...b.replace(/\s/g, '')].length;
-    return { q: { ...base, type: 'text', prompt: '빈칸에 들어갈 말은?', text: p.replace(b, '@@'), len: n, hintNote: `빈칸은 ${n}글자` }, answerText: b, explain: '속담: ' + p };
+    const [p, rawB, meaning] = item;
+    const blanks = (Array.isArray(rawB) ? rawB : String(rawB).split(',')).map(x => String(x).trim()).filter(Boolean);
+    let text = '', pos = 0; const lens = [];
+    blanks.forEach((b, k) => { const j = p.indexOf(b, pos); if (j < 0) return; text += p.slice(pos, j) + `@@${k}@@`; pos = j + b.length; lens.push([...b.replace(/\s/g, '')].length); });
+    text += p.slice(pos);
+    const two = lens.length > 1;
+    return { q: { ...base, type: 'text', prompt: two ? '두 빈칸에 들어갈 말은?' : '빈칸에 들어갈 말은?', text, lens, meaning: meaning || '',
+        hintNote: two ? `빈칸 ${lens.length}개 · 쉼표나 띄어쓰기로 구분해서 쓰세요 (예: ${blanks.map(b => '○'.repeat([...b.replace(/\s/g, '')].length)).join(', ')})` : `빈칸은 ${lens[0]}글자` },
+      answerText: blanks.join(', '), explain: '속담: ' + p };
   }
   if (cat === 'vocab') {
     const [w, m] = item;
-    const pool = list.map((x, i) => i).filter(i => i !== idx && list[i][1] !== m);
+    const koToEn = idx % 2 === 1;   // 홀수 번호: 한글 뜻 → 영어 보기, 짝수 번호: 영어 → 한글 보기 (반반)
+    const pool = list.map((x, i) => i).filter(i => i !== idx && list[i][1] !== m && list[i][0] !== w);
     const picks = [];
-    while (picks.length < 3 && pool.length) picks.push(list[pool.splice(Math.floor(r() * pool.length), 1)[0]][1]);
+    while (picks.length < 3 && pool.length) picks.push(list[pool.splice(Math.floor(r() * pool.length), 1)[0]][koToEn ? 0 : 1]);
     const ci = Math.floor(r() * (picks.length + 1));
-    const options = picks.slice(); options.splice(ci, 0, m);
-    return { q: { ...base, type: 'choice', prompt: '뜻으로 알맞은 것은?', text: w, word: true, options }, correct: ci, answerText: m, explain: `${w} = ${m}` };
+    const options = picks.slice(); options.splice(ci, 0, koToEn ? w : m);
+    return koToEn
+      ? { q: { ...base, type: 'choice', prompt: '뜻에 맞는 영단어는?', text: m, ko: true, options }, correct: ci, answerText: w, explain: `${m} = ${w}` }
+      : { q: { ...base, type: 'choice', prompt: '뜻으로 알맞은 것은?', text: w, word: true, options }, correct: ci, answerText: m, explain: `${w} = ${m}` };
   }
 }
 function isRight(Q, v) {
@@ -149,9 +165,13 @@ const answerLabel = (q, v) => v == null ? '' : (q.type === 'text' ? String(v) : 
 function qBody(q) {
   let text = esc(q.text);
   if (q.cat === 'spelling') text = text.replace(/___/g, '<span class="blank">&nbsp;?&nbsp;</span>');
-  if (q.cat === 'proverb') text = text.replace('@@', `<span class="blank boxes">${'□'.repeat(q.len)}</span>`);
-  const cls = q.word ? 'word' : (q.cat === 'idiom' ? 'meaning' : '');
-  return `<div class="qtext ${cls}">${q.word ? `<span class="word">${text}</span>` : text}</div>`;
+  if (q.cat === 'proverb') {
+    const lens = q.lens || [q.len || 1];
+    text = text.replace(/@@(\d+)@@/g, (_, k) => `<span class="blank boxes">${'□'.repeat(lens[k] || 1)}</span>`).replace('@@', `<span class="blank boxes">${'□'.repeat(lens[0] || 1)}</span>`);
+  }
+  const cls = q.word ? 'word' : (q.cat === 'idiom' || q.ko ? 'meaning' : '');
+  const mean = q.cat === 'proverb' && q.meaning ? `<div class="qmeaning"><b>뜻</b>${esc(q.meaning)}</div>` : '';
+  return `<div class="qtext ${cls}">${q.word ? `<span class="word">${text}</span>` : text}</div>${mean}`;
 }
 function hintHTML(q) {
   if (q.cat === 'idiom') return `<div class="hint">${[...q.hint].map(h => `<div class="h">${esc(h)}</div>`).join('')}</div>`;
@@ -346,13 +366,19 @@ const Student = (() => {
         ${hintHTML(q)}
         <div id="ansArea"></div>`;
       const area = $('#ansArea');
+      setTimeout(applyHints, 0);
+      if (S.hintKey !== sentKey(L)) { S.hintKey = sentKey(L); S.hintsUsed = []; }
       if (S.sent === sentKey(L)) {
         area.innerHTML = `${q.type !== 'text' ? optsHTML(q, { tag: 'button', picked: S.picked, disabled: true }) : ''}<p class="pts" style="font-size:26px;margin-top:12px">제출 완료! 👍</p>`;
       } else if (q.type === 'text') {
-        area.innerHTML = `<form id="tf" class="row" style="flex-wrap:nowrap">
+        area.innerHTML = (q.hl && status === 'answer' ? `<div class="hintbtns">${IDIOM_HINTS.map((ms, k) =>
+            `<button class="btn ghost sm hb" data-k="${k}" disabled>💡 ${k ? '두 번째' : '첫'} 글자 <small>${ms / 1000}초 후</small></button>`).join('')}
+            <p class="dim small">힌트 1개마다 점수 ${Math.round((1 - HINT_MULT[1]) * 100)}%씩 줄어요</p></div>` : '') +
+          `<form id="tf" class="row" style="flex-wrap:nowrap">
           <input class="input" id="ta" maxlength="20" autocomplete="off" placeholder="${can ? '정답 입력' : '곧 입력할 수 있어요'}" ${can ? '' : 'disabled'} style="font-size:24px;text-align:center">
           <button class="btn green" ${can ? '' : 'disabled'}>제출</button></form>`;
         if (can) { $('#ta').focus(); $('#tf').onsubmit = e => { e.preventDefault(); const v = $('#ta').value.trim(); if (v) send(v); }; }
+        $$('#ansArea .hb').forEach(b => b.onclick = () => { const k = Number(b.dataset.k); if (!S.hintsUsed.includes(k)) S.hintsUsed.push(k); applyHints(); $('#ta') && $('#ta').focus(); });
       } else {
         area.innerHTML = optsHTML(q, { tag: 'button', disabled: !can });
         if (can) $$('#ansArea .opt').forEach(b => b.onclick = () => { S.picked = Number(b.dataset.i); send(S.picked); });
@@ -383,21 +409,38 @@ const Student = (() => {
     }
   }
 
+  function applyHints() {
+    const L = S.live; if (!L || !L.q || !L.q.hl || S.hintKey !== sentKey(L)) return;
+    const letters = [...dec(L.q.hl)];
+    S.hintsUsed.forEach(k => { const t = $$('.hint .h')[k]; if (t && letters[k]) { t.textContent = letters[k]; t.classList.add('rev'); } });
+    $$('#ansArea .hb').forEach(b => { if (S.hintsUsed.includes(Number(b.dataset.k))) { b.disabled = true; b.classList.add('used'); b.innerHTML = '✓ 힌트 사용'; } });
+  }
+
   async function send(v) {
     const L = S.live; if (!L || L.status !== 'answer' || S.sent === sentKey(L)) return;
     if (DB.now() > L.phaseEnd + 300) return toast('시간이 끝났어요!');
+    const h = S.hintKey === sentKey(L) ? S.hintsUsed.length : 0;
     S.sent = sentKey(L);
     S.key = null; render();
-    try { await DB.set(`rooms/${S.code}/answers/${L.round}/${S.pid}`, { v, t: DB.TS }); }
+    try { await DB.set(`rooms/${S.code}/answers/${L.round}/${S.pid}`, { v, t: DB.TS, h }); }
     catch (e) { S.sent = null; toast('전송 실패! 다시 눌러 주세요.'); S.key = null; render(); }
   }
 
   function tick() {
     const L = S.live, bar = $('#tbar i'); if (!L || !bar) return;
-    const total = L.status === 'show' ? SHOW_MS : ANSWER_MS;
+    const total = L.status === 'show' ? SHOW_MS : (L.answerMs || ANSWER_MS);
     const left = Math.max(0, L.phaseEnd - DB.now());
     bar.style.width = (left / total * 100) + '%';
-    if (L.status === 'answer' && left <= 0) $$('#ansArea button, #ansArea input').forEach(el => el.disabled = true);
+    if (L.status === 'answer' && left <= 0) { $$('#ansArea button, #ansArea input').forEach(el => el.disabled = true); return; }
+    if (L.status === 'answer') {
+      const elapsed = total - left;
+      $$('#ansArea .hb').forEach(b => {
+        const k = Number(b.dataset.k); if (S.hintsUsed.includes(k)) return;
+        const wait = Math.ceil((IDIOM_HINTS[k] - elapsed) / 1000);
+        b.disabled = wait > 0;
+        b.innerHTML = `💡 ${k ? '두 번째' : '첫'} 글자 ${wait > 0 ? `<small>${wait}초 후</small>` : '보기'}`;
+      });
+    }
   }
 
   return { entry };
@@ -513,7 +556,7 @@ const Teacher = (() => {
         <span class="spacer"></span>
         <button class="btn violet" id="edit">📝 문제 보기·수정</button>
       </div>
-      <p class="muted small" style="margin-top:22px">⏱ 문제 읽기 ${SHOW_MS / 1000}초 → 답하기 ${ANSWER_MS / 1000}초 · 빨리 맞힐수록 높은 점수 (최대 1000점, 정답이면 최소 500점)</p>
+      <p class="muted small" style="margin-top:22px">⏱ 문제 보기 ${SHOW_MS / 1000}초 → 답하기 ${ANSWER_MS / 1000}초 (사자성어 ${answerMs('idiom') / 1000}초) · 빨리 맞힐수록 높은 점수 (최대 1000점, 정답이면 최소 500점) · 진행 중에도 문제를 추가할 수 있어요</p>
     </div>`);
     $$('.cat').forEach(b => b.onclick = () => { s.cat = b.dataset.cat; consoleScreen(); });
     $$('#lv button').forEach(b => b.onclick = () => { s.lv = b.dataset.v; consoleScreen(); });
@@ -586,6 +629,7 @@ const Teacher = (() => {
         <span class="answered" id="ac"></span>
         <div class="timer" id="tm"><svg viewBox="0 0 100 100"><circle class="tr" cx="50" cy="50" r="44"/><circle class="fg" cx="50" cy="50" r="44" stroke-dasharray="276.5" stroke-dashoffset="0"/></svg><div class="num">10</div></div>
         <button class="btn sm" id="skip">건너뛰기 ⏭</button>
+        <button class="btn ghost sm" id="addq" title="총 문제 수를 1개 늘려요">＋ 문제 추가</button>
         <button class="iconbtn" id="snd" title="소리">🔊</button>
         <button class="iconbtn" id="fs" title="전체 화면">⛶</button>
         <button class="btn ghost sm" id="stop">그만하기</button>
@@ -596,11 +640,12 @@ const Teacher = (() => {
     $('#snd').onclick = e => { SFX.on = !SFX.on; e.currentTarget.textContent = SFX.on ? '🔊' : '🔇'; };
     $('#skip').onclick = () => { if (s.phase === 'show') startAnswer(); else if (s.phase === 'answer') endAnswer(); };
     $('#stop').onclick = () => { if (confirm('지금까지 점수로 최종 순위를 볼까요?')) finish(); };
+    $('#addq').onclick = () => addQuestions(1);
     keep(DB.on(R('players'), v => { T.players = v || {}; updateAnswered(); }));
     let lastSec = -1;
     every(() => {
       if (!s || !s.phaseEnd || (s.phase !== 'show' && s.phase !== 'answer')) return;
-      const total = s.phase === 'show' ? SHOW_MS : ANSWER_MS;
+      const total = s.phase === 'show' ? SHOW_MS : s.ansMs;
       const left = s.phaseEnd - DB.now();
       const sec = Math.max(0, Math.ceil(left / 1000));
       const tm = $('#tm'); if (!tm) return;
@@ -612,6 +657,17 @@ const Teacher = (() => {
       if (left <= 0 && s.phase === 'show') startAnswer();
       else if (left <= -400 && s.phase === 'answer') endAnswer();
     }, 100);
+  }
+
+  function roundLabel() {
+    const s = T.sess, el = $('#rd'); if (el && s) el.textContent = `${s.round} / ${s.total} 문제 · #${s.idx + 1}`;
+  }
+  async function addQuestions(n) {
+    const s = T.sess; if (!s) return;
+    s.total += n; roundLabel();
+    toast(`문제를 ${n}개 추가했어요 · 총 ${s.total}문제`);
+    await DB.update(R('live'), { total: s.total });
+    if (s.phase === 'result') renderResult();
   }
 
   function updateAnswered() {
@@ -628,15 +684,15 @@ const Teacher = (() => {
     const len = bank(s.cat, s.lv, custom).length;
     const idx = (T.progress[key] || 0) % len;
     const Q = buildQ(s.cat, s.lv, idx, custom);
-    Object.assign(s, { Q, idx, phase: 'show', phaseEnd: DB.now() + SHOW_MS, ended: false, answerCount: 0 });
+    Object.assign(s, { Q, idx, phase: 'show', phaseEnd: DB.now() + SHOW_MS, ended: false, answerCount: 0, ansMs: answerMs(s.cat) });
     T.progress[key] = (idx + 1) % len;
-    $('#rd').textContent = `${s.round} / ${s.total} 문제 · #${idx + 1}`;
+    roundLabel();
     $('#skip').classList.remove('hidden'); $('#tm').classList.remove('hidden');
     renderQuestion();
     await DB.update(`rooms/${T.code}`, {
       [`progress/${key}`]: T.progress[key],
       [`answers/${s.round}`]: null,
-      'live/status': 'show', 'live/round': s.round, 'live/qNo': idx + 1, 'live/q': Q.q,
+      'live/status': 'show', 'live/round': s.round, 'live/total': s.total, 'live/qNo': idx + 1, 'live/q': Q.q, 'live/answerMs': s.ansMs,
       'live/phaseEnd': s.phaseEnd, 'live/reveal': null, 'live/stats': null, 'live/answerStart': null
     });
   }
@@ -654,7 +710,7 @@ const Teacher = (() => {
 
   async function startAnswer() {
     const s = T.sess; if (s.phase !== 'show') return;
-    s.phase = 'answer'; s.phaseEnd = DB.now() + ANSWER_MS;
+    s.phase = 'answer'; s.phaseEnd = DB.now() + s.ansMs;
     SFX.go();
     const ph = $('#ph'); if (ph) { ph.textContent = '⚡ 지금 답하세요!'; ph.classList.add('go'); }
     await DB.update(R('live'), { status: 'answer', phaseEnd: s.phaseEnd, answerStart: DB.TS });
@@ -675,13 +731,14 @@ const Teacher = (() => {
     if (s.unsubAns) s.unsubAns();
     $('#skip').classList.add('hidden'); $('#tm').classList.add('hidden'); updateAnswered();
     const [ans, players, live] = await Promise.all([DB.get(R(`answers/${s.round}`)), DB.get(R('players')), DB.get(R('live'))]);
-    const Q = s.Q, start = (live && live.answerStart) || (s.phaseEnd - ANSWER_MS);
+    const Q = s.Q, A = s.ansMs, start = (live && live.answerStart) || (s.phaseEnd - A);
     const rows = Object.entries(players || {}).map(([pid, p]) => {
       const a = ans && ans[pid];
-      if (!a) return { pid, name: p.name, v: null, ok: false, pts: 0, ms: null, prev: p.score || 0 };
+      if (!a) return { pid, name: p.name, v: null, ok: false, pts: 0, ms: null, h: 0, prev: p.score || 0 };
       const ok = isRight(Q, a.v);
-      const ms = Math.max(0, Math.min(ANSWER_MS, (a.t || start) - start));
-      return { pid, name: p.name, v: a.v, ok, ms, pts: ok ? Math.round(500 + 500 * (1 - ms / ANSWER_MS)) : 0, prev: p.score || 0 };
+      const ms = Math.max(0, Math.min(A, (a.t || start) - start));
+      const h = Math.max(0, Math.min(2, Number(a.h) || 0));
+      return { pid, name: p.name, v: a.v, ok, ms, h, pts: ok ? Math.round((500 + 500 * (1 - ms / A)) * HINT_MULT[h]) : 0, prev: p.score || 0 };
     });
     const nOk = rows.filter(r => r.ok).length, nNa = rows.filter(r => r.v == null).length, nNo = rows.length - nOk - nNa;
     let dist = null;
@@ -750,9 +807,9 @@ const Teacher = (() => {
     const rows = s.rows.slice().sort((a, b) => (b.ok - a.ok) || ((a.v == null) - (b.v == null)) || ((a.ms ?? 1e9) - (b.ms ?? 1e9)));
     const m = document.createElement('div'); m.className = 'modal';
     m.innerHTML = `<div class="card"><div class="row"><h2 class="title" style="font-size:24px">개인별 응답 · ${s.round}번째 문제</h2><span class="spacer"></span><button class="iconbtn" id="mx">✕</button></div>
-      <table class="table"><thead><tr><th>이름</th><th>응답</th><th>결과</th><th>걸린 시간</th><th>점수</th></tr></thead><tbody>
+      <table class="table"><thead><tr><th>이름</th><th>응답</th><th>결과</th><th>걸린 시간</th>${q.hl ? '<th>힌트</th>' : ''}<th>점수</th></tr></thead><tbody>
       ${rows.map(r => `<tr><td>${esc(r.name)}</td><td>${r.v == null ? '<span class="dim">—</span>' : esc(answerLabel(q, r.v))}</td>
-        <td class="${r.ok ? 'o' : 'x'}">${r.ok ? '⭕ 정답' : r.v == null ? '미응답' : '❌ 오답'}</td><td>${r.ms == null ? '' : (r.ms / 1000).toFixed(1) + '초'}</td><td>${r.pts ? '+' + r.pts : ''}</td></tr>`).join('')}
+        <td class="${r.ok ? 'o' : 'x'}">${r.ok ? '⭕ 정답' : r.v == null ? '미응답' : '❌ 오답'}</td><td>${r.ms == null ? '' : (r.ms / 1000).toFixed(1) + '초'}</td>${q.hl ? `<td>${r.h ? '💡'.repeat(r.h) : ''}</td>` : ''}<td>${r.pts ? '+' + r.pts : ''}</td></tr>`).join('')}
       </tbody></table></div>`;
     document.body.appendChild(m);
     const close = () => m.remove();
@@ -777,12 +834,14 @@ const Teacher = (() => {
       <div class="podium">${pod}</div>
       ${list.length > 3 ? `<div class="rest">${list.slice(3).map((p, k) => `<span>${rankOf(k + 3)}위<b>${esc(p.name)}</b>${p.score}</span>`).join('')}</div>` : ''}
       <div class="row" style="justify-content:center;margin-top:10px">
-        <button class="btn big pink" id="again">🔁 한 판 더</button>
+        <button class="btn big green" id="more">＋ 5문제 이어서 (점수 유지)</button>
+        <button class="btn big pink" id="again">🔁 새 게임</button>
         <button class="btn big ghost" id="home">처음 화면으로</button>
       </div>
     </section>`);
     SFX.fanfare(); setTimeout(() => confetti(5000), 900);
     $('#again').onclick = openLobby;
+    $('#more').onclick = () => { s.total = s.round + 5; gameScreen(); nextRound(); };
     $('#home').onclick = () => consoleScreen();
   }
 
@@ -791,14 +850,14 @@ const Teacher = (() => {
     spelling: [['문장 (빈칸 자리에 ___ 를 넣으세요)', 'text'], ['정답', 'text'], ['오답', 'text'], ['해설 (선택)', 'text']],
     ox: [['문장', 'text'], ['정답', 'ox'], ['해설 (선택)', 'text']],
     idiom: [['사자성어 (한글 4글자)', 'text'], ['뜻', 'area']],
-    proverb: [['속담 전체', 'text'], ['빈칸으로 만들 말 (속담에 들어 있는 말)', 'text']],
+    proverb: [['속담 전체', 'text'], ['빈칸으로 만들 말 (2개면 쉼표로 구분, 속담에 나오는 순서대로)', 'text'], ['뜻', 'area']],
     vocab: [['영단어', 'text'], ['뜻', 'text']]
   };
   function preview(cat, it) {
     if (cat === 'spelling') return it[0].replace('___', `[${it[1]} / ${it[2]}]`);
     if (cat === 'ox') return `${Number(it[1]) ? '⭕' : '❌'} ${it[0]}`;
     if (cat === 'idiom') return `${it[0]} — ${it[1]}`;
-    if (cat === 'proverb') return it[0].replace(it[1], `[${it[1]}]`);
+    if (cat === 'proverb') { let t = it[0]; (Array.isArray(it[1]) ? it[1] : String(it[1]).split(',')).forEach(b => { b = String(b).trim(); if (b) t = t.replace(b, `[${b}]`); }); return t + (it[2] ? ` — ${it[2]}` : ''); }
     if (cat === 'vocab') return `${it[0]} — ${it[1]}`;
   }
   function editor(cat, lv) {
@@ -818,7 +877,7 @@ const Teacher = (() => {
       const fm = document.createElement('form');
       fm.innerHTML = FIELDS[cat].map(([lab, t], k) => `<label class="field"><span>${lab}</span>${
         t === 'ox' ? `<select class="input" name="f${k}"><option value="1" ${Number(it[k]) ? 'selected' : ''}>O (맞다)</option><option value="0" ${Number(it[k]) ? '' : 'selected'}>X (틀리다)</option></select>`
-        : t === 'area' ? `<textarea class="input" name="f${k}">${esc(it[k] || '')}</textarea>` : `<input class="input" name="f${k}" value="${esc(it[k] || '')}" style="font-size:17px">`}</label>`).join('') +
+        : t === 'area' ? `<textarea class="input" name="f${k}">${esc(it[k] || '')}</textarea>` : `<input class="input" name="f${k}" value="${esc(Array.isArray(it[k]) ? it[k].join(', ') : (it[k] ?? ''))}" style="font-size:17px">`}</label>`).join('') +
         `<div class="err"></div><div class="row"><button class="btn green sm">저장</button>${custom[i] ? '<button type="button" class="btn ghost sm" data-act="reset">원래 문제로 되돌리기</button>' : ''}
          <button type="button" class="btn ghost sm" data-act="here">이 문제부터 출제</button><span class="spacer"></span><span class="dim small">미리보기는 저장 후 목록에서 확인</span></div>`;
       row.appendChild(fm);
@@ -830,7 +889,13 @@ const Teacher = (() => {
         if (!v[0] || (cat !== 'ox' && !v[1])) return err('필수 칸을 채워 주세요.');
         if (cat === 'spelling' && !v[0].includes('___')) return err('문장에 빈칸 표시 ___ (밑줄 3개)를 넣어 주세요.');
         if (cat === 'spelling' && (!v[2] || v[1] === v[2])) return err('정답과 다른 오답을 입력해 주세요.');
-        if (cat === 'proverb' && !v[0].includes(v[1])) return err('빈칸으로 만들 말이 속담 안에 그대로 들어 있어야 해요.');
+        if (cat === 'proverb') {
+          const bl = v[1].split(',').map(x => x.trim()).filter(Boolean);
+          if (bl.length < 1 || bl.length > 2) return err('빈칸은 1개 또는 2개로 정해 주세요.');
+          let pos = 0;
+          for (const b of bl) { const j = v[0].indexOf(b, pos); if (j < 0) return err(`'${b}'이(가) 속담 안에 (순서대로) 들어 있지 않아요.`); pos = j + b.length; }
+          v[1] = bl;
+        }
         if (cat === 'spelling' && !v[3]) v.pop();
         if (cat === 'ox' && !v[2]) v.pop();
         await DB.set(R(`custom/${key}/${i}`), v);
