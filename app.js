@@ -1,4 +1,4 @@
-/* 맞혀라! — 틈새 상식 퀴즈 배틀 */
+/* 맞사속상영 — 실시간 상식 퀴즈 배틀 */
 (() => {
 'use strict';
 
@@ -7,15 +7,18 @@ const SHOW_MS = 10000;      // 문제 보여주는 시간
 const ANSWER_MS = 10000;    // 답하는 시간
 const COUNTS = [5, 10, 15, 20];
 const CATS = {
-  spelling: { name: '맞춤법',  icon: '✍️', c: '#E5463B', desc: '둘 중 바른 말 고르기' },
-  idiom:    { name: '사자성어', icon: '📜', c: '#F2A516', desc: '초성 힌트 보고 쓰기' },
-  proverb:  { name: '속담',    icon: '🗣️', c: '#2FA84F', desc: '빈칸에 들어갈 말 쓰기' },
-  ox:       { name: '상식',    icon: '💡', c: '#1F7FE0', desc: 'O / X 퀴즈' },
-  vocab:    { name: '영단어',  icon: '🔤', c: '#8B5CF6', desc: '4개 중 뜻 고르기' }
+  spelling: { name: '맞춤법',  icon: '✍️', c: '#FF5C7A', desc: '둘 중 바른 말 고르기' },
+  idiom:    { name: '사자성어', icon: '📜', c: '#FFB443', desc: '초성 힌트 보고 쓰기' },
+  proverb:  { name: '속담',    icon: '🗣️', c: '#22D3A0', desc: '빈칸에 들어갈 말 쓰기' },
+  ox:       { name: '상식',    icon: '💡', c: '#4C9DFF', desc: 'O / X 퀴즈' },
+  vocab:    { name: '영단어',  icon: '🔤', c: '#9D7CFF', desc: '4개 중 뜻 고르기' }
 };
 const LEVELS = { m: '중학생', h: '고등학생' };
+const LOGO_CATS = ['spelling', 'idiom', 'proverb', 'ox', 'vocab'];
+const logoHTML = (cls = 'logo') => `<div class="${cls}" role="img" aria-label="맞사속상영">${[...'맞사속상영'].map((ch, i) =>
+  `<span style="--c:${CATS[LOGO_CATS[i]].c};--d:${(i * .09).toFixed(2)}s">${ch}</span>`).join('')}</div>`;
 const SHAPES = ['▲', '◆', '●', '■'];
-const PCOL = ['#F5CD30', '#FF6B5E', '#4ADE80', '#5AB4FF', '#B794FF', '#FF9F43', '#A3E635', '#F472B6', '#FFFFFF'];
+const PCOL = ['#FF7A93', '#FFC266', '#4FE3B8', '#6FB2FF', '#B39CFF', '#FF9F6B', '#7EE0FF', '#F59BD3', '#C8F06A'];
 
 /* ───────────── 유틸 ───────────── */
 const $ = (s, r = document) => r.querySelector(s);
@@ -86,7 +89,7 @@ function confetti(ms = 4500) {
   const my = ++confettiId;
   const cv = $('#confetti'), ctx = cv.getContext('2d');
   cv.width = innerWidth; cv.height = innerHeight;
-  const cols = ['#FFD23F', '#FF5C8A', '#3DDC97', '#4CC9F0', '#A78BFA', '#fff'];
+  const cols = ['#FF5C7A', '#FFB443', '#22D3A0', '#4C9DFF', '#9D7CFF', '#ffffff'];
   const P = Array.from({ length: 180 }, () => ({
     x: Math.random() * cv.width, y: -20 - Math.random() * cv.height * .6, w: 6 + Math.random() * 8, h: 8 + Math.random() * 10,
     vx: -2 + Math.random() * 4, vy: 2 + Math.random() * 4, r: Math.random() * 6, vr: -.2 + Math.random() * .4, c: cols[Math.floor(Math.random() * cols.length)]
@@ -182,8 +185,8 @@ function Home() {
   screen(`
   <section class="home">
     <div>
-      <div class="logo">맞혀라<span class="bolt">!</span></div>
-      <p class="tagline">조회 시간 10분, 우리 반 상식왕은 누구?</p>
+      ${logoHTML()}
+      <p class="tagline">맞춤법 · 사자성어 · 속담 · 상식 · 영단어<br><b>우리 반 실시간 퀴즈 배틀</b></p>
     </div>
     <div class="choices">
       <button class="btn big choice pink" id="goS"><span class="em">🙋</span>학생 입장<small>학급 코드로 들어가기</small></button>
@@ -210,7 +213,7 @@ const Student = (() => {
   function codeScreen(prefill) {
     screen(`
     <div class="wrap narrow center" style="margin-top:6vh">
-      <div class="logo" style="font-size:72px">맞혀라<span class="bolt">!</span></div>
+      ${logoHTML('logo md')}
       <div class="card" style="margin-top:28px;text-align:left">
         <h2 class="title">학급 코드 입력</h2>
         <p class="muted" style="margin-bottom:16px">선생님 화면에 보이는 8자리 숫자를 입력하세요.</p>
@@ -238,7 +241,7 @@ const Student = (() => {
   function nameScreen(msg = '') {
     screen(`
     <div class="wrap narrow center" style="margin-top:6vh">
-      <div class="mini-logo">맞혀라!</div>
+      ${logoHTML('mini-logo')}
       <div class="card" style="margin-top:20px;text-align:left">
         <p class="muted small">학급 코드 <b style="color:var(--yellow)">${fmtCode(S.code)}</b></p>
         <h2 class="title">이름을 알려 주세요</h2>
@@ -280,7 +283,7 @@ const Student = (() => {
     S.key = null; S.leaving = false; S.wasIn = false;
     screen(`
     <section class="st">
-      <div class="head"><span class="mini-logo">맞혀라!</span><span class="spacer"></span><span class="me">${esc(S.name)}<b id="myScore">0점</b></span>
+      <div class="head">${logoHTML('mini-logo')}<span class="spacer"></span><span class="me">${esc(S.name)}<b id="myScore">0점</b></span>
         <button class="iconbtn" id="leave" title="나가기">🚪</button></div>
       <div class="main" id="stm"></div>
     </section>`);
@@ -416,7 +419,7 @@ const Teacher = (() => {
   function login(tab) {
     screen(`
     <div class="wrap narrow" style="margin-top:4vh">
-      <div class="center"><div class="logo" style="font-size:64px">맞혀라<span class="bolt">!</span></div><p class="muted" style="margin:10px 0 22px">선생님 페이지</p></div>
+      <div class="center">${logoHTML('logo md')}<p class="muted" style="margin:10px 0 22px">선생님 페이지</p></div>
       <div class="card">
         <div class="tabs"><button data-t="find" class="${tab === 'find' ? 'on' : ''}">🔑 내 학급 열기</button><button data-t="new" class="${tab === 'new' ? 'on' : ''}">✨ 새 학급 만들기</button></div>
         ${tab === 'find' ? `
@@ -490,7 +493,7 @@ const Teacher = (() => {
         <span class="pg">다음 문제 <b>${p + 1}번</b> / ${len}<span class="bar"><i style="width:${p / len * 100}%"></i></span></span></button>`;
     }).join('');
     screen(`
-    <div class="topbar"><span class="mini-logo">맞혀라!</span><span class="spacer"></span>
+    <div class="topbar">${logoHTML('mini-logo')}<span class="spacer"></span>
       <span class="codechip">학급 코드<b>${fmtCode(T.code)}</b></span>
       <span class="codechip">찾기 문구 · ${esc(T.meta.phrase)}</span>
       <button class="btn ghost sm" id="logout">로그아웃</button></div>
@@ -528,7 +531,7 @@ const Teacher = (() => {
     await DB.update(`rooms/${T.code}`, { players: null, answers: null, live: { sid: T.sess.sid, status: 'lobby', cat, lv, total: n, round: 0 } });
     const c = CATS[cat], url = joinURL(T.code);
     screen(`
-    <div class="topbar"><span class="mini-logo">맞혀라!</span><span class="badge" style="--c:${c.c}">${c.icon} ${c.name} · ${LEVELS[lv]} · ${n}문제</span><span class="spacer"></span>
+    <div class="topbar">${logoHTML('mini-logo')}<span class="badge" style="--c:${c.c}">${c.icon} ${c.name} · ${LEVELS[lv]} · ${n}문제</span><span class="spacer"></span>
       <button class="iconbtn" id="fs" title="전체 화면">⛶</button></div>
     <section class="lobby">
       <div class="card joinbox">
@@ -576,7 +579,7 @@ const Teacher = (() => {
     screen(`
     <section class="game">
       <div class="hud">
-        <span class="mini-logo">맞혀라!</span>
+        ${logoHTML('mini-logo')}
         <span class="badge" style="--c:${c.c}">${c.icon} ${c.name} · ${LEVELS[s.lv]}</span>
         <span class="badge plain" id="rd"></span>
         <span class="spacer"></span>
@@ -846,7 +849,7 @@ const Teacher = (() => {
       };
     };
     screen(`
-    <div class="topbar"><span class="mini-logo">맞혀라!</span><span class="spacer"></span><button class="btn ghost sm" id="bk">← 돌아가기</button></div>
+    <div class="topbar">${logoHTML('mini-logo')}<span class="spacer"></span><button class="btn ghost sm" id="bk">← 돌아가기</button></div>
     <div class="wrap">
       <h2 class="title">📝 문제 보기 · 수정</h2>
       <p class="muted small">수정한 문제는 이 학급에만 저장돼요. 분홍 줄이 다음 게임에서 먼저 나올 문제예요.</p>
