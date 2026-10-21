@@ -317,6 +317,9 @@ button.opt:active:not(:disabled){transform:scale(.97)}
 @keyframes bounce{50%{transform:translateY(-10px)}}
 
 /* ── 문제 편집 ── */
+.startbox{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;padding:12px 16px;border-radius:16px;
+  background:rgba(255,92,122,.08);border:1px solid rgba(255,92,122,.3);font-weight:700}
+.startbox .input{width:96px;padding:8px 12px;font-size:18px;text-align:center}
 .qlist{display:flex;flex-direction:column;gap:8px;margin-top:16px}
 .qrow{background:rgba(255,255,255,.045);border:1px solid var(--stroke);border-radius:16px;padding:10px 14px;transition:border-color .2s}
 .qrow:hover{border-color:var(--stroke2)}

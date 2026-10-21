@@ -4,8 +4,8 @@
 
 /* ───────────── 기본 설정 ───────────── */
 const SHOW_MS = 3000;       // 문제 보여주는 시간 (모든 카테고리)
-const ANSWER_MS = 10000;    // 답하는 시간 (기본)
-const ANSWER_MS_BY_CAT = { idiom: 30000 };   // 카테고리별 답하는 시간
+const ANSWER_MS = 20000;    // 답하는 시간 (모든 카테고리)
+const ANSWER_MS_BY_CAT = {};                 // 카테고리별로 다르게 하려면 예: { idiom: 30000 }
 const answerMs = cat => ANSWER_MS_BY_CAT[cat] || ANSWER_MS;
 const IDIOM_HINTS = [5000, 10000];           // 사자성어 힌트: 답하기 시작 후 첫 글자 5초, 두 번째 글자 10초
 const HINT_MULT = [1, .75, .5];              // 힌트 사용 개수별 점수 배율
@@ -139,7 +139,7 @@ function buildQ(cat, lv, idx, custom) {
     text += p.slice(pos);
     const two = lens.length > 1;
     return { q: { ...base, type: 'text', prompt: two ? '두 빈칸에 들어갈 말은?' : '빈칸에 들어갈 말은?', text, lens, meaning: meaning || '',
-        hintNote: two ? `빈칸 ${lens.length}개 · 쉼표나 띄어쓰기로 구분해서 쓰세요 (예: ${blanks.map(b => '○'.repeat([...b.replace(/\s/g, '')].length)).join(', ')})` : `빈칸은 ${lens[0]}글자` },
+        hintNote: two ? `빈칸 ${lens.length}개 · 쉼표나 띄어쓰기로 구분해서 쓰세요 (예: ${blanks.map(b => '○'.repeat([...b.replace(/\s/g, '')].length)).join(', ')})` : `빈칸은 ${lens[0]}글자 · 띄어쓰기는 틀려도 괜찮아요` },
       answerText: blanks.join(', '), explain: '속담: ' + p };
   }
   if (cat === 'vocab') {
@@ -556,7 +556,7 @@ const Teacher = (() => {
         <span class="spacer"></span>
         <button class="btn violet" id="edit">📝 문제 보기·수정</button>
       </div>
-      <p class="muted small" style="margin-top:22px">⏱ 문제 보기 ${SHOW_MS / 1000}초 → 답하기 ${ANSWER_MS / 1000}초 (사자성어 ${answerMs('idiom') / 1000}초) · 빨리 맞힐수록 높은 점수 (최대 1000점, 정답이면 최소 500점) · 진행 중에도 문제를 추가할 수 있어요</p>
+      <p class="muted small" style="margin-top:22px">⏱ 문제 보기 ${SHOW_MS / 1000}초 → 답하기 ${ANSWER_MS / 1000}초 · 빨리 맞힐수록 높은 점수 (최대 1000점, 정답이면 최소 500점) · 진행 중에도 문제를 추가할 수 있어요</p>
     </div>`);
     $$('.cat').forEach(b => b.onclick = () => { s.cat = b.dataset.cat; consoleScreen(); });
     $$('#lv button').forEach(b => b.onclick = () => { s.lv = b.dataset.v; consoleScreen(); });
@@ -868,8 +868,19 @@ const Teacher = (() => {
       $('#ql').innerHTML = list.map((it, i) => ({ it, i })).filter(({ it }) => !f || JSON.stringify(it).toLowerCase().includes(f)).map(({ it, i }) =>
         `<div class="qrow ${custom[i] ? 'edited' : ''} ${i === next ? 'next' : ''}" data-i="${i}"><div class="top"><span class="no">${i + 1}</span>
           <span class="pv">${esc(preview(cat, it))}</span>${i === next ? '<span class="tag nx">다음 출제</span>' : ''}${custom[i] ? '<span class="tag">수정됨</span>' : ''}
+          ${i === next ? '' : '<button class="btn ghost sm" data-act="from" title="다음 게임을 이 문제부터 시작">▶ 여기부터</button>'}
           <button class="btn ghost sm" data-act="edit">수정</button></div></div>`).join('');
       $$('#ql [data-act=edit]').forEach(b => b.onclick = () => openForm(b.closest('.qrow')));
+      $$('#ql [data-act=from]').forEach(b => b.onclick = () => setStart(Number(b.closest('.qrow').dataset.i)));
+      const sn = $('#startNo'); if (sn && document.activeElement !== sn) sn.value = next + 1;
+      const tot = $('#startTot'); if (tot) tot.textContent = list.length;
+    };
+    const setStart = async i => {
+      const len = bank(cat, lv, T.custom[key]).length;
+      i = ((Math.round(i) % len) + len) % len;
+      T.progress[key] = i; await DB.set(R(`progress/${key}`), i);
+      toast(`다음 게임은 ${i + 1}번 문제부터 출제돼요`); draw();
+      const n = $('.qrow.next'); if (n) n.scrollIntoView({ block: 'center', behavior: 'smooth' });
     };
     const openForm = row => {
       if ($('form', row)) return $('form', row).remove();
@@ -908,10 +919,7 @@ const Teacher = (() => {
         const c = { ...(T.custom[key] || {}) }; delete c[i]; T.custom[key] = c;
         toast('원래 문제로 되돌렸어요'); draw();
       };
-      $('[data-act=here]', fm).onclick = async () => {
-        T.progress[key] = i; await DB.set(R(`progress/${key}`), i);
-        toast(`다음 게임은 ${i + 1}번부터 출제돼요`); draw();
-      };
+      $('[data-act=here]', fm).onclick = () => setStart(i);
     };
     screen(`
     <div class="topbar">${logoHTML('mini-logo')}<span class="spacer"></span><button class="btn ghost sm" id="bk">← 돌아가기</button></div>
@@ -923,12 +931,21 @@ const Teacher = (() => {
         <div class="seg" id="el">${Object.entries(LEVELS).map(([k, v]) => `<button data-v="${k}" class="${lv === k ? 'on' : ''}">${v}</button>`).join('')}</div>
         <input class="input" id="q" placeholder="🔍 검색" style="flex:1;min-width:160px;font-size:17px">
       </div>
+      <form class="startbox" id="sf">
+        <span>▶ 다음 게임 시작 위치</span>
+        <input class="input" id="startNo" type="number" min="1" inputmode="numeric">
+        <span class="muted">번 / <b id="startTot"></b>문제</span>
+        <button class="btn sm">적용</button>
+        <button type="button" class="btn ghost sm" id="startFirst">처음(1번)부터</button>
+      </form>
       <div class="qlist" id="ql"></div>
     </div>`);
     $('#bk').onclick = () => consoleScreen();
     $('#ec').onchange = e => editor(e.target.value, lv);
     $$('#el button').forEach(b => b.onclick = () => editor(cat, b.dataset.v));
     $('#q').oninput = draw;
+    $('#sf').onsubmit = e => { e.preventDefault(); const v = Number($('#startNo').value); if (v >= 1) setStart(v - 1); };
+    $('#startFirst').onclick = () => setStart(0);
     draw();
     const n = $('.qrow.next'); if (n) n.scrollIntoView({ block: 'center' });
   }
