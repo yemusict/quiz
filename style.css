@@ -109,6 +109,20 @@ h2.title{font-size:30px;font-weight:800;letter-spacing:-.035em;margin-bottom:6px
 .home .choice{padding:26px 20px;flex-direction:column;gap:6px;font-size:24px;border-radius:24px;white-space:normal}
 .home .choice small{font-size:14px;font-weight:600;opacity:.85}
 .home .choice .em{font-size:40px;margin-bottom:4px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.3))}
+.siteqr{display:flex;align-items:center;gap:18px;text-align:left;padding:14px 22px 14px 14px;border-radius:22px;background:var(--glass);border:1px solid var(--stroke);
+  box-shadow:var(--shadow);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);transition:transform .2s var(--ease),border-color .2s;animation:rise .6s var(--ease) .3s both}
+.siteqr:hover{transform:translateY(-3px);border-color:var(--stroke2)}
+.siteqr .qrwrap{background:#fff;border-radius:14px;padding:8px;flex:none;box-shadow:0 0 36px -10px rgba(139,107,255,.8)}
+.siteqr .qrwrap img,.siteqr .qrwrap canvas{display:block;width:112px!important;height:112px!important}
+.siteqr .qrtxt{display:flex;flex-direction:column;gap:4px}
+.siteqr .qrtxt b{font-size:18px;font-weight:800}
+.siteqr .qrtxt span{font-size:14px;color:var(--muted)}
+.siteqr .qrtxt code{font-family:inherit;font-size:15px;font-weight:800;color:var(--gold);letter-spacing:-.01em;margin-top:2px}
+.siteqr .qrtxt small{font-size:12px;color:var(--dim);font-weight:600}
+.qrmodal{cursor:zoom-out}
+.qrbig{display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center}
+.qrbig .qrbox img,.qrbig .qrbox canvas{width:min(520px,78vw,62vh)!important;height:auto!important}
+.qrbig .bigurl{font-size:clamp(26px,4vw,46px);font-weight:900;letter-spacing:-.03em;background:linear-gradient(180deg,#fff,#c9bcff);-webkit-background-clip:text;background-clip:text;color:transparent}
 .demo-badge{display:inline-block;background:rgba(255,201,77,.08);border:1px solid rgba(255,201,77,.35);color:#ffe2a0;border-radius:14px;padding:10px 16px;font-size:13px;max-width:600px;font-weight:600;line-height:1.55}
 
 /* ── 상단 바 ── */
@@ -349,5 +363,8 @@ button.opt:active:not(:disabled){transform:scale(.97)}
   .card{padding:20px}
   .topbar .codechip{font-size:11px}
   .topbar .mini-logo{font-size:22px}
+  .siteqr{gap:14px;padding:12px 16px 12px 12px}
+  .siteqr .qrtxt b{font-size:16px;white-space:nowrap}
+  .siteqr .qrwrap img,.siteqr .qrwrap canvas{width:96px!important;height:96px!important}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

@@ -20,6 +20,11 @@ const CATS = {
   vocab:    { name: '영단어',  icon: '🔤', c: '#9D7CFF', desc: '4개 중 뜻 고르기' }
 };
 const LEVELS = { m: '중학생', h: '고등학생' };
+const SITE_URL = 'https://yemusict.github.io/quiz/';
+function makeQR(el, text, size) {
+  if (window.QRCode) new QRCode(el, { text, width: size, height: size, colorDark: '#12142a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  else el.innerHTML = `<p style="color:#12142a;padding:12px;font-size:13px">QR을 불러오지 못했어요</p>`;
+}
 const LOGO_CATS = ['spelling', 'idiom', 'proverb', 'ox', 'vocab'];
 const logoHTML = (cls = 'logo') => `<div class="${cls}" role="img" aria-label="맞사속상영">${[...'맞사속상영'].map((ch, i) =>
   `<span style="--c:${CATS[LOGO_CATS[i]].c};--d:${(i * .09).toFixed(2)}s">${ch}</span>`).join('')}</div>`;
@@ -212,10 +217,25 @@ function Home() {
       <button class="btn big choice pink" id="goS"><span class="em">🙋</span>학생 입장<small>학급 코드로 들어가기</small></button>
       <button class="btn big choice cyan" id="goT"><span class="em">🧑‍🏫</span>선생님<small>게임 열기 · 문제 관리</small></button>
     </div>
+    <button class="siteqr" id="siteqr" title="눌러서 크게 보기">
+      <span class="qrwrap"><span id="homeqr"></span></span>
+      <span class="qrtxt"><b>📱 휴대폰으로 접속하기</b><span>카메라로 QR을 찍으세요</span><code>${SITE_URL.replace(/^https:\/\//, '').replace(/\/$/, '')}</code><small>눌러서 크게 보기 ⤢</small></span>
+    </button>
     ${DB.mode === 'local' ? `<p class="demo-badge">🧪 데모 모드 — Firebase 설정 전이라 <b>같은 브라우저의 탭끼리만</b> 연결돼요. 탭 하나는 선생님, 다른 탭은 학생으로 체험해 보세요.</p>` : ''}
   </section>`);
   $('#goS').onclick = () => { location.hash = '#play'; };
   $('#goT').onclick = () => { location.hash = '#teacher'; };
+  makeQR($('#homeqr'), SITE_URL, 220);
+  $('#siteqr').onclick = () => {
+    const m = document.createElement('div'); m.className = 'modal qrmodal';
+    m.innerHTML = `<div class="qrbig"><div class="qrbox"><div id="bigqr"></div></div>
+      <div class="bigurl">${SITE_URL.replace(/^https:\/\//, '').replace(/\/$/, '')}</div>
+      <p class="muted">카메라로 QR을 찍어 접속하세요 · 화면을 누르면 닫혀요</p></div>`;
+    document.body.appendChild(m);
+    makeQR($('#bigqr', m), SITE_URL, 520);
+    m.onclick = () => m.remove();
+    keep(() => m.remove());
+  };
 }
 
 /* ═════════════════════ 학생 ═════════════════════ */
