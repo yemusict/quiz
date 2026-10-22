@@ -219,23 +219,27 @@ function Home() {
     </div>
     <button class="siteqr" id="siteqr" title="눌러서 크게 보기">
       <span class="qrwrap"><span id="homeqr"></span></span>
-      <span class="qrtxt"><b>📱 휴대폰으로 접속하기</b><span>카메라로 QR을 찍으세요</span><code>${SITE_URL.replace(/^https:\/\//, '').replace(/\/$/, '')}</code><small>눌러서 크게 보기 ⤢</small></span>
+      <span class="qrtxt"><span>카메라로 QR을 찍으세요</span><code>${SITE_URL.replace(/^https:\/\//, '').replace(/\/$/, '')}</code><small>눌러서 크게 보기 ⤢</small></span>
     </button>
     ${DB.mode === 'local' ? `<p class="demo-badge">🧪 데모 모드 — Firebase 설정 전이라 <b>같은 브라우저의 탭끼리만</b> 연결돼요. 탭 하나는 선생님, 다른 탭은 학생으로 체험해 보세요.</p>` : ''}
   </section>`);
   $('#goS').onclick = () => { location.hash = '#play'; };
   $('#goT').onclick = () => { location.hash = '#teacher'; };
   makeQR($('#homeqr'), SITE_URL, 220);
-  $('#siteqr').onclick = () => {
-    const m = document.createElement('div'); m.className = 'modal qrmodal';
-    m.innerHTML = `<div class="qrbig"><div class="qrbox"><div id="bigqr"></div></div>
-      <div class="bigurl">${SITE_URL.replace(/^https:\/\//, '').replace(/\/$/, '')}</div>
-      <p class="muted">카메라로 QR을 찍어 접속하세요 · 화면을 누르면 닫혀요</p></div>`;
-    document.body.appendChild(m);
-    makeQR($('#bigqr', m), SITE_URL, 520);
-    m.onclick = () => m.remove();
-    keep(() => m.remove());
-  };
+  $('#siteqr').onclick = () => showQRModal(SITE_URL);
+}
+
+/* QR 크게 보기 (첫 화면 · 게임 중 공용) */
+function showQRModal(url, code) {
+  const m = document.createElement('div'); m.className = 'modal qrmodal';
+  m.innerHTML = `<div class="qrbig"><div class="qrbox"><div id="bigqr"></div></div>
+    ${code ? `<div class="muted" style="font-size:18px">학급 코드</div><div class="bigcode" style="margin:0">${fmtCode(code)}</div>` : ''}
+    <div class="bigurl">${esc(url.replace(/^https:\/\//, '').replace(/\/$/, ''))}</div>
+    <p class="muted">카메라로 QR을 찍어 접속하세요 · 화면을 누르면 닫혀요</p></div>`;
+  document.body.appendChild(m);
+  makeQR($('#bigqr', m), url, 520);
+  m.onclick = () => m.remove();
+  keep(() => m.remove());
 }
 
 /* ═════════════════════ 학생 ═════════════════════ */
@@ -645,6 +649,8 @@ const Teacher = (() => {
         ${logoHTML('mini-logo')}
         <span class="badge" style="--c:${c.c}">${c.icon} ${c.name} · ${LEVELS[s.lv]}</span>
         <span class="badge plain" id="rd"></span>
+        <button class="joinchip" id="joinchip" title="눌러서 크게 보기 — 게임 중에도 들어올 수 있어요">
+          <span class="jqr" id="hudqr"></span><span class="jtx"><small>지금 들어오기</small><b>${fmtCode(T.code)}</b></span></button>
         <span class="spacer"></span>
         <span class="answered" id="ac"></span>
         <div class="timer" id="tm"><svg viewBox="0 0 100 100"><circle class="tr" cx="50" cy="50" r="44"/><circle class="fg" cx="50" cy="50" r="44" stroke-dasharray="276.5" stroke-dashoffset="0"/></svg><div class="num">10</div></div>
@@ -661,7 +667,15 @@ const Teacher = (() => {
     $('#skip').onclick = () => { if (s.phase === 'show') startAnswer(); else if (s.phase === 'answer') endAnswer(); };
     $('#stop').onclick = () => { if (confirm('지금까지 점수로 최종 순위를 볼까요?')) finish(); };
     $('#addq').onclick = () => addQuestions(1);
-    keep(DB.on(R('players'), v => { T.players = v || {}; updateAnswered(); }));
+    makeQR($('#hudqr'), joinURL(T.code), 160);
+    $('#joinchip').onclick = () => showQRModal(joinURL(T.code), T.code);
+    let prevN = Object.keys(T.players).length;
+    keep(DB.on(R('players'), v => {
+      T.players = v || {}; updateAnswered();
+      const n = Object.keys(T.players).length;
+      if (n > prevN) { SFX.pop(); const nm = Object.values(T.players).sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0))[0]; if (nm) toast(`🙋 ${nm.name} 학생이 들어왔어요`); }
+      prevN = n;
+    }));
     let lastSec = -1;
     every(() => {
       if (!s || !s.phaseEnd || (s.phase !== 'show' && s.phase !== 'answer')) return;
