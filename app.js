@@ -37,7 +37,8 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const app = $('#app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const randId = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
-const fmtCode = c => String(c).replace(/(\d{4})(\d{4})/, '$1 $2');
+const fmtCode = c => { c = String(c); return c.length === 6 ? c.replace(/(\d{3})(\d{3})/, '$1 $2') : c.replace(/(\d{4})(\d{4})/, '$1 $2'); };
+const isCode = c => /^(\d{6}|\d{8})$/.test(c);   // 새 학급은 6자리 (예전 8자리 학급도 계속 사용 가능)
 const norm = s => String(s ?? '').normalize('NFC').replace(/[\s.,!?~'"`·:;\-_()\[\]]/g, '').toLowerCase();
 const baseURL = () => location.origin + location.pathname.replace(/index\.html$/, '');
 const joinURL = code => baseURL() + '?c=' + code;
@@ -260,9 +261,9 @@ const Student = (() => {
       ${logoHTML('logo md')}
       <div class="card" style="margin-top:28px;text-align:left">
         <h2 class="title">학급 코드 입력</h2>
-        <p class="muted" style="margin-bottom:16px">선생님 화면에 보이는 8자리 숫자를 입력하세요.</p>
+        <p class="muted" style="margin-bottom:16px">선생님 화면에 보이는 6자리 숫자를 입력하세요.</p>
         <form id="f">
-          <input class="input code" id="code" inputmode="numeric" autocomplete="off" maxlength="9" placeholder="0000 0000" value="${esc(prefill ? fmtCode(prefill) : '')}">
+          <input class="input code" id="code" inputmode="numeric" autocomplete="off" maxlength="9" placeholder="000 000" value="${esc(prefill ? fmtCode(prefill) : '')}">
           <div class="err" id="err"></div>
           <button class="btn big block" style="margin-top:8px">다음 ▶</button>
         </form>
@@ -270,12 +271,12 @@ const Student = (() => {
       <button class="btn ghost" style="margin-top:20px" onclick="location.href='${baseURL()}'">← 처음으로</button>
     </div>`);
     const inp = $('#code');
-    inp.oninput = () => { const d = inp.value.replace(/\D/g, '').slice(0, 8); inp.value = d.length > 4 ? d.slice(0, 4) + ' ' + d.slice(4) : d; };
+    inp.oninput = () => { const d = inp.value.replace(/\D/g, '').slice(0, 8); inp.value = d.length > 6 ? d.slice(0, 4) + ' ' + d.slice(4) : d.length > 3 ? d.slice(0, 3) + ' ' + d.slice(3) : d; };
     if (!prefill) inp.focus();
     $('#f').onsubmit = async e => {
       e.preventDefault();
       const code = inp.value.replace(/\D/g, '');
-      if (code.length !== 8) return ($('#err').textContent = '8자리 숫자를 모두 입력해 주세요.');
+      if (!isCode(code)) return ($('#err').textContent = '6자리 숫자를 모두 입력해 주세요.');
       const meta = await DB.get(`rooms/${code}/meta`).catch(() => null);
       if (!meta) return ($('#err').textContent = '학급 코드를 찾을 수 없어요. 다시 확인해 주세요.');
       S.code = code; nameScreen();
@@ -488,17 +489,17 @@ const Teacher = (() => {
     <div class="wrap narrow" style="margin-top:4vh">
       <div class="center">${logoHTML('logo md')}<p class="muted" style="margin:10px 0 22px">선생님 페이지</p></div>
       <div class="card">
-        <div class="tabs"><button data-t="find" class="${tab === 'find' ? 'on' : ''}">🔑 내 학급 열기</button><button data-t="new" class="${tab === 'new' ? 'on' : ''}">✨ 새 학급 만들기</button></div>
+        <div class="tabs"><button data-t="find" class="${tab === 'find' ? 'on' : ''}">🔑 기존 학급 열기</button><button data-t="new" class="${tab === 'new' ? 'on' : ''}">✨ 새 학급 만들기</button></div>
         ${tab === 'find' ? `
         <form id="f">
-          <label class="field"><span>학급 찾기 문구 또는 8자리 학급 코드</span><input class="input" id="key" placeholder="예: 종암2026202" autocomplete="off"></label>
+          <label class="field"><span>학급 찾기 문구 또는 6자리 학급 코드</span><input class="input" id="key" placeholder="예: 종암2026202" autocomplete="off"></label>
           <label class="field"><span>비밀번호</span><input class="input" id="pw" type="password" autocomplete="current-password"></label>
           <div class="err" id="err"></div>
           <button class="btn big block">입장하기</button>
         </form>` : `
         <form id="f">
-          <p class="muted small" style="margin-bottom:14px">학급마다 <b>8자리 학급 코드</b>가 자동으로 만들어져요. 코드를 잊어도 <b>찾기 문구</b>로 다시 찾을 수 있어요.</p>
-          <label class="field"><span>학급 찾기 문구 (다른 선생님과 겹치지 않게)</span><input class="input" id="key" placeholder="예: 종암2026202" autocomplete="off"></label>
+          <p class="muted small" style="margin-bottom:14px">학급마다 <b>6자리 학급 코드</b>가 자동으로 만들어져요. 코드를 잊어도 <b>찾기 문구</b>로 다시 찾을 수 있어요.</p>
+          <label class="field"><span>학급 찾기 문구 (다른 학급과 겹치지 않게)</span><input class="input" id="key" placeholder="예: 종암2026202" autocomplete="off"></label>
           <label class="field"><span>비밀번호 (4자 이상)</span><input class="input" id="pw" type="password" autocomplete="new-password"></label>
           <label class="field"><span>비밀번호 확인</span><input class="input" id="pw2" type="password" autocomplete="new-password"></label>
           <div class="err" id="err"></div>
@@ -516,7 +517,7 @@ const Teacher = (() => {
       try {
         if (tab === 'find') {
           if (!key || !pw) return err('문구(또는 코드)와 비밀번호를 입력해 주세요.');
-          let code = /^\d{4}\s?\d{4}$/.test(key) ? key.replace(/\D/g, '') : await DB.get('phrases/' + await sha256('p:' + key.toLowerCase()));
+          let code = isCode(key.replace(/\s/g, '')) ? key.replace(/\D/g, '') : await DB.get('phrases/' + await sha256('p:' + key.toLowerCase()));
           if (!code) return err('그 문구로 만든 학급이 없어요.');
           const meta = await DB.get(`rooms/${code}/meta`);
           if (!meta) return err('학급을 찾을 수 없어요.');
@@ -524,13 +525,13 @@ const Teacher = (() => {
           T.code = code; sessionStorage.setItem(TKEY, code); consoleScreen();
         } else {
           if (key.length < 3) return err('찾기 문구는 3자 이상으로 써 주세요.');
-          if (/^\d{8}$/.test(key.replace(/\s/g, ''))) return err('찾기 문구는 8자리 숫자만으로는 만들 수 없어요.');
+          if (isCode(key.replace(/\s/g, ''))) return err('찾기 문구는 6자리(또는 8자리) 숫자만으로는 만들 수 없어요.');
           if (pw.length < 4) return err('비밀번호는 4자 이상으로 해 주세요.');
           if (pw !== $('#pw2').value) return err('비밀번호 확인이 일치하지 않아요.');
           const ph = await sha256('p:' + key.toLowerCase());
           if (await DB.get('phrases/' + ph)) return err('이미 사용 중인 문구예요. 다른 문구를 정해 주세요.');
           let code;
-          for (let i = 0; i < 20; i++) { const c = String(10000000 + Math.floor(Math.random() * 90000000)); if (!(await DB.get(`rooms/${c}/meta`))) { code = c; break; } }
+          for (let i = 0; i < 20; i++) { const c = String(100000 + Math.floor(Math.random() * 900000)); if (!(await DB.get(`rooms/${c}/meta`))) { code = c; break; } }
           await DB.set(`rooms/${code}/meta`, { phrase: key, pwHash: await sha256(code + ':' + pw), createdAt: DB.TS });
           await DB.set('phrases/' + ph, code);
           T.code = code; sessionStorage.setItem(TKEY, code);
